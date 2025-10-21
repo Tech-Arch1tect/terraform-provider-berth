@@ -26,10 +26,11 @@ type RoleResource struct {
 }
 
 type RoleResourceModel struct {
-	ID          types.String           `tfsdk:"id"`
-	Name        types.String           `tfsdk:"name"`
-	Description types.String           `tfsdk:"description"`
-	Permissions []RolePermissionInline `tfsdk:"permissions"`
+	ID             types.String           `tfsdk:"id"`
+	Name           types.String           `tfsdk:"name"`
+	Description    types.String           `tfsdk:"description"`
+	Permissions    []RolePermissionInline `tfsdk:"permissions"`
+	PermissionSets []PermissionSet        `tfsdk:"permission_set"`
 }
 
 type RolePermissionInline struct {
@@ -37,6 +38,16 @@ type RolePermissionInline struct {
 	ServerID       types.Int64  `tfsdk:"server_id"`
 	PermissionName types.String `tfsdk:"permission_name"`
 	StackPattern   types.String `tfsdk:"stack_pattern"`
+}
+
+type PermissionSet struct {
+	ServerIDs   []types.Int64          `tfsdk:"server_ids"`
+	Permissions []PermissionDefinition `tfsdk:"permissions"`
+}
+
+type PermissionDefinition struct {
+	Name    types.String `tfsdk:"name"`
+	Pattern types.String `tfsdk:"pattern"`
 }
 
 func (r *RoleResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -65,7 +76,7 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 		},
 		Blocks: map[string]schema.Block{
 			"permissions": schema.ListNestedBlock{
-				Description: "Inline permissions for this role",
+				Description: "Inline permissions for this role (use permission_set for bulk assignment to multiple servers)",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -84,6 +95,35 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 							Description: "Stack name pattern (supports wildcards, e.g., '*', 'prod-*'). Defaults to '*'",
 							Optional:    true,
 							Computed:    true,
+						},
+					},
+				},
+			},
+			"permission_set": schema.ListNestedBlock{
+				Description: "Permission sets - apply multiple permissions to multiple servers at once",
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"server_ids": schema.ListAttribute{
+							Description: "List of server IDs to apply these permissions to",
+							Required:    true,
+							ElementType: types.Int64Type,
+						},
+					},
+					Blocks: map[string]schema.Block{
+						"permissions": schema.ListNestedBlock{
+							Description: "List of permissions to apply",
+							NestedObject: schema.NestedBlockObject{
+								Attributes: map[string]schema.Attribute{
+									"name": schema.StringAttribute{
+										Description: "Permission name (e.g., 'stacks.read', 'stacks.manage')",
+										Required:    true,
+									},
+									"pattern": schema.StringAttribute{
+										Description: "Stack pattern. Defaults to '*'",
+										Optional:    true,
+									},
+								},
+							},
 						},
 					},
 				},
@@ -124,6 +164,34 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 
 	data.ID = types.StringValue(strconv.FormatUint(uint64(role.ID), 10))
+
+	for _, permSet := range data.PermissionSets {
+		for _, serverID := range permSet.ServerIDs {
+			for _, perm := range permSet.Permissions {
+				stackPattern := "*"
+				if !perm.Pattern.IsNull() && !perm.Pattern.IsUnknown() {
+					stackPattern = perm.Pattern.ValueString()
+				}
+
+				permission, err := r.client.GetPermissionByName(perm.Name.ValueString())
+				if err != nil {
+					resp.Diagnostics.AddError("Failed to find permission", err.Error())
+					return
+				}
+
+				_, err = r.client.CreateRolePermission(
+					role.ID,
+					uint(serverID.ValueInt64()),
+					permission.ID,
+					stackPattern,
+				)
+				if err != nil {
+					resp.Diagnostics.AddError("Failed to create role permission from permission set", err.Error())
+					return
+				}
+			}
+		}
+	}
 
 	for i, perm := range data.Permissions {
 		stackPattern := "*"
@@ -239,7 +307,7 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	if len(data.Permissions) > 0 || len(state.Permissions) > 0 {
+	if len(data.Permissions) > 0 || len(state.Permissions) > 0 || len(data.PermissionSets) > 0 || len(state.PermissionSets) > 0 {
 
 		existingPerms, _, err := r.client.ListRolePermissions(roleID)
 		if err != nil {
@@ -251,6 +319,34 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			if err := r.client.DeleteRolePermission(roleID, perm.ID); err != nil {
 				resp.Diagnostics.AddError("Failed to delete permission", err.Error())
 				return
+			}
+		}
+
+		for _, permSet := range data.PermissionSets {
+			for _, serverID := range permSet.ServerIDs {
+				for _, perm := range permSet.Permissions {
+					stackPattern := "*"
+					if !perm.Pattern.IsNull() && !perm.Pattern.IsUnknown() {
+						stackPattern = perm.Pattern.ValueString()
+					}
+
+					permission, err := r.client.GetPermissionByName(perm.Name.ValueString())
+					if err != nil {
+						resp.Diagnostics.AddError("Failed to find permission", err.Error())
+						return
+					}
+
+					_, err = r.client.CreateRolePermission(
+						roleID,
+						uint(serverID.ValueInt64()),
+						permission.ID,
+						stackPattern,
+					)
+					if err != nil {
+						resp.Diagnostics.AddError("Failed to create role permission from permission set", err.Error())
+						return
+					}
+				}
 			}
 		}
 
