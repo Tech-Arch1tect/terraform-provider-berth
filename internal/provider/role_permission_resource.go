@@ -58,7 +58,7 @@ func (r *RolePermissionResource) Schema(ctx context.Context, req resource.Schema
 				Required:    true,
 			},
 			"permission_name": schema.StringAttribute{
-				Description: "Permission name (e.g., 'stacks.read', 'stacks.manage', 'files.read', 'files.write', 'logs.read')",
+				Description: "Permission name (e.g., 'stacks.read', 'stacks.manage', 'stacks.create', 'files.read', 'files.write', 'logs.read')",
 				Required:    true,
 			},
 			"stack_pattern": schema.StringAttribute{
