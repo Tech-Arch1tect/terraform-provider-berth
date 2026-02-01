@@ -1,7 +1,7 @@
 .PHONY: build install test clean fmt
 
 BINARY_NAME=terraform-provider-berth
-VERSION?=0.1.0
+VERSION?=0.2.0
 OS_ARCH?=linux_amd64
 
 build:

@@ -2,7 +2,10 @@ module github.com/tech-arch1tect/terraform-provider-berth
 
 go 1.25.1
 
-require github.com/hashicorp/terraform-plugin-framework v1.16.1
+require (
+	github.com/hashicorp/terraform-plugin-framework v1.16.1
+	github.com/tech-arch1tect/berth-go-api-client v0.0.0-20260201220951-46b9340ff65e
+)
 
 require (
 	github.com/fatih/color v1.15.0 // indirect
