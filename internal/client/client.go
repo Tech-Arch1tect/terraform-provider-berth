@@ -79,7 +79,7 @@ func NewClient(baseURL, apiKey string, insecureSkipVerify bool) *Client {
 	}
 }
 
-func (c *Client) ListRoles() ([]Role, error) {
+func (c *Client) ListRoles() ([]berth.RoleWithPermissions, error) {
 	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminRolesGet(c.ctx).Execute()
 	if err != nil {
 		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
@@ -88,17 +88,7 @@ func (c *Client) ListRoles() ([]Role, error) {
 		return nil, fmt.Errorf("failed to list roles: %w", err)
 	}
 
-	roles := make([]Role, 0, len(resp.Data.Roles))
-	for _, r := range resp.Data.Roles {
-		roles = append(roles, Role{
-			ID:          uint(r.Id),
-			Name:        r.Name,
-			Description: r.Description,
-			IsAdmin:     r.IsAdmin,
-		})
-	}
-
-	return roles, nil
+	return resp.Data.Roles, nil
 }
 
 func (c *Client) GetRole(id uint) (*Role, error) {
@@ -108,8 +98,13 @@ func (c *Client) GetRole(id uint) (*Role, error) {
 	}
 
 	for _, role := range roles {
-		if role.ID == id {
-			return &role, nil
+		if uint(role.Id) == id {
+			return &Role{
+				ID:          id,
+				Name:        role.Name,
+				Description: role.Description,
+				IsAdmin:     role.IsAdmin,
+			}, nil
 		}
 	}
 
@@ -245,6 +240,42 @@ func (c *Client) ListPermissions() ([]Permission, error) {
 	}
 
 	return permissions, nil
+}
+
+func (c *Client) ListPermissionDetails() ([]berth.PermissionInfo, error) {
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminPermissionsGet(c.ctx).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list permissions: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to list permissions: %w", err)
+	}
+
+	return resp.Data.Permissions, nil
+}
+
+func (c *Client) ListServers() ([]berth.ServerInfo, error) {
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminServersGet(c.ctx).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list servers: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to list servers: %w", err)
+	}
+
+	return resp.Data.Servers, nil
+}
+
+func (c *Client) ListS3Buckets() ([]berth.BucketResponse, error) {
+	resp, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsGet(c.ctx).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list s3 buckets: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to list s3 buckets: %w", err)
+	}
+
+	return resp.Data, nil
 }
 
 func (c *Client) GetPermissionByName(name string) (*Permission, error) {
