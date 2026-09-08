@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.16.1
-	github.com/tech-arch1tect/berth-go-api-client v0.0.0-20260201220951-46b9340ff65e
+	github.com/tech-arch1tect/berth-go-api-client v0.5.2
 )
 
 require (
@@ -30,4 +30,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
+	gopkg.in/validator.v2 v2.0.1 // indirect
 )
