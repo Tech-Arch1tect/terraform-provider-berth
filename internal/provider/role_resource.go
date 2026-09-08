@@ -249,7 +249,11 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 
 	role, err := r.client.GetRole(uint(id))
-	if err != nil {
+	switch classifyRead(err) {
+	case readGone:
+		resp.State.RemoveResource(ctx)
+		return
+	case readFailed:
 		resp.Diagnostics.AddError("Failed to read role", err.Error())
 		return
 	}

@@ -3,12 +3,27 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	berth "github.com/tech-arch1tect/berth-go-api-client"
 )
+
+var ErrNotFound = errors.New("not found")
+
+type NotFoundError struct {
+	Detail string
+}
+
+func (e *NotFoundError) Error() string { return e.Detail }
+
+func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
+
+func notFound(detail string) error {
+	return &NotFoundError{Detail: detail}
+}
 
 type Client struct {
 	api    *berth.APIClient
@@ -65,8 +80,11 @@ func NewClient(baseURL, apiKey string, insecureSkipVerify bool) *Client {
 }
 
 func (c *Client) ListRoles() ([]Role, error) {
-	resp, _, err := c.api.AdminAPI.ApiV1AdminRolesGet(c.ctx).Execute()
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminRolesGet(c.ctx).Execute()
 	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list roles: %s", httpResp.Status))
+		}
 		return nil, fmt.Errorf("failed to list roles: %w", err)
 	}
 
@@ -95,7 +113,7 @@ func (c *Client) GetRole(id uint) (*Role, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("role not found")
+	return nil, notFound("role not found")
 }
 
 func (c *Client) CreateRole(name, description string) (*Role, error) {
@@ -139,8 +157,11 @@ func (c *Client) DeleteRole(id uint) error {
 }
 
 func (c *Client) ListRolePermissions(roleID uint) ([]RolePermission, []Permission, error) {
-	resp, _, err := c.api.AdminAPI.ApiV1AdminRolesRoleIdStackPermissionsGet(c.ctx, int32(roleID)).Execute()
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminRolesRoleIdStackPermissionsGet(c.ctx, int32(roleID)).Execute()
 	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, nil, notFound(fmt.Sprintf("failed to list role permissions: %s", httpResp.Status))
+		}
 		return nil, nil, fmt.Errorf("failed to list role permissions: %w", err)
 	}
 
@@ -180,7 +201,7 @@ func (c *Client) GetRolePermission(roleID, permissionID uint) (*RolePermission, 
 		}
 	}
 
-	return nil, fmt.Errorf("permission not found")
+	return nil, notFound("permission not found")
 }
 
 func (c *Client) CreateRolePermission(roleID, serverID, permissionID uint, stackPattern string) (*RolePermission, error) {

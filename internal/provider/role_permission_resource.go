@@ -156,7 +156,11 @@ func (r *RolePermissionResource) Read(ctx context.Context, req resource.ReadRequ
 	}
 
 	perm, err := r.client.GetRolePermission(uint(data.RoleID.ValueInt64()), uint(id))
-	if err != nil {
+	switch classifyRead(err) {
+	case readGone:
+		resp.State.RemoveResource(ctx)
+		return
+	case readFailed:
 		resp.Diagnostics.AddError("Failed to read role permission", err.Error())
 		return
 	}
