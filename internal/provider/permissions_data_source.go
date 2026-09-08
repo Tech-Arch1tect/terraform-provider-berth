@@ -97,7 +97,7 @@ func (d *PermissionsDataSource) Configure(ctx context.Context, req datasource.Co
 }
 
 func (d *PermissionsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	permissions, err := d.client.ListPermissionDetails()
+	permissions, err := d.client.ListPermissions()
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read permissions", err.Error())
 		return

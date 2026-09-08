@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/tech-arch1tect/terraform-provider-berth/internal/client"
+	berth "github.com/tech-arch1tect/berth-go-api-client"
 )
 
 type roleRuleKey struct {
@@ -28,18 +28,18 @@ func stackPatternValue(stackPattern types.String) string {
 	return normaliseStackPattern(stackPattern.ValueString())
 }
 
-func roleRuleKeyOf(rule client.RolePermission) roleRuleKey {
+func roleRuleKeyOf(rule berth.StackPermissionRule) roleRuleKey {
 	return roleRuleKey{
-		serverID:     rule.ServerID,
-		permissionID: rule.PermissionID,
+		serverID:     uint(rule.ServerId),
+		permissionID: uint(rule.PermissionId),
 		stackPattern: normaliseStackPattern(rule.StackPattern),
 	}
 }
 
-func permissionIDsByName(permissions []client.Permission) map[string]uint {
+func permissionIDsByName(permissions []berth.PermissionInfo) map[string]uint {
 	ids := make(map[string]uint, len(permissions))
 	for _, permission := range permissions {
-		ids[permission.Name] = permission.ID
+		ids[permission.Name] = uint(permission.Id)
 	}
 	return ids
 }
@@ -61,7 +61,7 @@ func claimedRoleRuleKeys(permissions []RolePermissionInline, permissionIDs map[s
 	return claimed, nil
 }
 
-func refreshedRoleRules(rules []client.RolePermission, permissions []client.Permission, current []RolePermissionInline) ([]RolePermissionInline, error) {
+func refreshedRoleRules(rules []berth.StackPermissionRule, permissions []berth.PermissionInfo, current []RolePermissionInline) ([]RolePermissionInline, error) {
 	claimed, err := claimedRoleRuleKeys(current, permissionIDsByName(permissions))
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func refreshedRoleRules(rules []client.RolePermission, permissions []client.Perm
 
 	names := make(map[uint]string, len(permissions))
 	for _, permission := range permissions {
-		names[permission.ID] = permission.Name
+		names[uint(permission.Id)] = permission.Name
 	}
 
 	refreshed := make([]RolePermissionInline, 0, len(current))
@@ -79,9 +79,9 @@ func refreshedRoleRules(rules []client.RolePermission, permissions []client.Perm
 				continue
 			}
 			refreshed = append(refreshed, RolePermissionInline{
-				ID:             types.StringValue(strconv.FormatUint(uint64(rule.ID), 10)),
-				ServerID:       types.Int64Value(int64(rule.ServerID)),
-				PermissionName: types.StringValue(names[rule.PermissionID]),
+				ID:             types.StringValue(strconv.FormatUint(uint64(rule.Id), 10)),
+				ServerID:       types.Int64Value(int64(uint(rule.ServerId))),
+				PermissionName: types.StringValue(names[uint(rule.PermissionId)]),
 				StackPattern:   types.StringValue(normaliseStackPattern(rule.StackPattern)),
 			})
 			break
@@ -95,8 +95,8 @@ func rolePermissionsTouched(plan, state *RoleResourceModel) bool {
 		len(plan.PermissionSets) > 0 || len(state.PermissionSets) > 0
 }
 
-func plannedRoleRules(model *RoleResourceModel, permissionIDs map[string]uint) ([]client.RolePermission, error) {
-	desired := make([]client.RolePermission, 0)
+func plannedRoleRules(model *RoleResourceModel, permissionIDs map[string]uint) ([]berth.StackPermissionRule, error) {
+	desired := make([]berth.StackPermissionRule, 0)
 	seen := make(map[roleRuleKey]bool)
 
 	add := func(serverID uint, permissionName, stackPattern string) error {
@@ -111,9 +111,9 @@ func plannedRoleRules(model *RoleResourceModel, permissionIDs map[string]uint) (
 		}
 		if !seen[key] {
 			seen[key] = true
-			desired = append(desired, client.RolePermission{
-				ServerID:     serverID,
-				PermissionID: permissionID,
+			desired = append(desired, berth.StackPermissionRule{
+				ServerId:     int32(serverID),
+				PermissionId: int32(permissionID),
 				StackPattern: key.stackPattern,
 			})
 		}
@@ -139,7 +139,7 @@ func plannedRoleRules(model *RoleResourceModel, permissionIDs map[string]uint) (
 	return desired, nil
 }
 
-func roleRuleChanges(desired, previous, current []client.RolePermission) (deletions []uint, creations []client.RolePermission) {
+func roleRuleChanges(desired, previous, current []berth.StackPermissionRule) (deletions []uint, creations []berth.StackPermissionRule) {
 	desiredKeys := make(map[roleRuleKey]bool, len(desired))
 	for _, rule := range desired {
 		desiredKeys[roleRuleKeyOf(rule)] = true
@@ -155,7 +155,7 @@ func roleRuleChanges(desired, previous, current []client.RolePermission) (deleti
 		key := roleRuleKeyOf(rule)
 		currentKeys[key] = true
 		if previousKeys[key] && !desiredKeys[key] {
-			deletions = append(deletions, rule.ID)
+			deletions = append(deletions, uint(rule.Id))
 		}
 	}
 
@@ -199,7 +199,7 @@ func (r *RoleResource) reconcileRoleRules(roleID uint, plan, state *RoleResource
 	}
 
 	for _, rule := range creations {
-		if _, err := r.client.CreateRolePermission(roleID, rule.ServerID, rule.PermissionID, rule.StackPattern); err != nil {
+		if _, err := r.client.CreateRolePermission(roleID, uint(rule.ServerId), uint(rule.PermissionId), rule.StackPattern); err != nil {
 			return err
 		}
 	}
@@ -214,8 +214,8 @@ func (r *RoleResource) reconcileRoleRules(roleID uint, plan, state *RoleResource
 			stackPattern := stackPatternValue(permission.StackPattern)
 			permissionID := permissionIDs[permission.PermissionName.ValueString()]
 			for _, rule := range rules {
-				if rule.ServerID == serverID && rule.PermissionID == permissionID && rule.StackPattern == stackPattern {
-					plan.Permissions[i].ID = types.StringValue(strconv.FormatUint(uint64(rule.ID), 10))
+				if uint(rule.ServerId) == serverID && uint(rule.PermissionId) == permissionID && rule.StackPattern == stackPattern {
+					plan.Permissions[i].ID = types.StringValue(strconv.FormatUint(uint64(rule.Id), 10))
 					plan.Permissions[i].StackPattern = types.StringValue(stackPattern)
 					break
 				}

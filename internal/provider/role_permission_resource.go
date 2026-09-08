@@ -108,7 +108,7 @@ func (r *RolePermissionResource) Create(ctx context.Context, req resource.Create
 	perm, err := r.client.CreateRolePermission(
 		uint(data.RoleID.ValueInt64()),
 		uint(data.ServerID.ValueInt64()),
-		permission.ID,
+		uint(permission.Id),
 		stackPattern,
 	)
 	if err != nil {
@@ -124,8 +124,8 @@ func (r *RolePermissionResource) Create(ctx context.Context, req resource.Create
 
 	var foundID uint
 	for _, p := range perms {
-		if p.ServerID == perm.ServerID && p.PermissionID == permission.ID && p.StackPattern == stackPattern {
-			foundID = p.ID
+		if uint(p.ServerId) == uint(perm.ServerId) && uint(p.PermissionId) == uint(permission.Id) && p.StackPattern == stackPattern {
+			foundID = uint(p.Id)
 			break
 		}
 	}
@@ -165,7 +165,7 @@ func (r *RolePermissionResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	data.ServerID = types.Int64Value(int64(perm.ServerID))
+	data.ServerID = types.Int64Value(int64(uint(perm.ServerId)))
 	data.StackPattern = types.StringValue(perm.StackPattern)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

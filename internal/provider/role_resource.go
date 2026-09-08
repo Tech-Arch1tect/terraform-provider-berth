@@ -163,7 +163,7 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	data.ID = types.StringValue(strconv.FormatUint(uint64(role.ID), 10))
+	data.ID = types.StringValue(strconv.FormatUint(uint64(role.Id), 10))
 
 	for _, permSet := range data.PermissionSets {
 		for _, serverID := range permSet.ServerIDs {
@@ -180,9 +180,9 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 				}
 
 				_, err = r.client.CreateRolePermission(
-					role.ID,
+					uint(role.Id),
 					uint(serverID.ValueInt64()),
-					permission.ID,
+					uint(permission.Id),
 					stackPattern,
 				)
 				if err != nil {
@@ -206,9 +206,9 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		}
 
 		createdPerm, err := r.client.CreateRolePermission(
-			role.ID,
+			uint(role.Id),
 			uint(perm.ServerID.ValueInt64()),
-			permission.ID,
+			uint(permission.Id),
 			stackPattern,
 		)
 		if err != nil {
@@ -216,15 +216,15 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 			return
 		}
 
-		perms, _, err := r.client.ListRolePermissions(role.ID)
+		perms, _, err := r.client.ListRolePermissions(uint(role.Id))
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to read created permission", err.Error())
 			return
 		}
 
 		for _, p := range perms {
-			if p.ServerID == createdPerm.ServerID && p.PermissionID == permission.ID && p.StackPattern == stackPattern {
-				data.Permissions[i].ID = types.StringValue(strconv.FormatUint(uint64(p.ID), 10))
+			if uint(p.ServerId) == uint(createdPerm.ServerId) && uint(p.PermissionId) == uint(permission.Id) && p.StackPattern == stackPattern {
+				data.Permissions[i].ID = types.StringValue(strconv.FormatUint(uint64(p.Id), 10))
 				data.Permissions[i].StackPattern = types.StringValue(stackPattern)
 				break
 			}

@@ -31,28 +31,6 @@ type Client struct {
 	apiKey string
 }
 
-type Role struct {
-	ID          uint   `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	IsAdmin     bool   `json:"is_admin"`
-}
-
-type Permission struct {
-	ID          uint   `json:"id"`
-	Name        string `json:"name"`
-	Resource    string `json:"resource"`
-	Action      string `json:"action"`
-	Description string `json:"description"`
-}
-
-type RolePermission struct {
-	ID           uint   `json:"id"`
-	ServerID     uint   `json:"server_id"`
-	PermissionID uint   `json:"permission_id"`
-	StackPattern string `json:"stack_pattern"`
-}
-
 func NewClient(baseURL, apiKey string, insecureSkipVerify bool) *Client {
 	cfg := berth.NewConfiguration()
 	cfg.Servers = berth.ServerConfigurations{
@@ -91,27 +69,22 @@ func (c *Client) ListRoles() ([]berth.RoleWithPermissions, error) {
 	return resp.Data.Roles, nil
 }
 
-func (c *Client) GetRole(id uint) (*Role, error) {
+func (c *Client) GetRole(id uint) (*berth.RoleWithPermissions, error) {
 	roles, err := c.ListRoles()
 	if err != nil {
 		return nil, err
 	}
 
-	for _, role := range roles {
+	for i, role := range roles {
 		if uint(role.Id) == id {
-			return &Role{
-				ID:          id,
-				Name:        role.Name,
-				Description: role.Description,
-				IsAdmin:     role.IsAdmin,
-			}, nil
+			return &roles[i], nil
 		}
 	}
 
 	return nil, notFound("role not found")
 }
 
-func (c *Client) CreateRole(name, description string) (*Role, error) {
+func (c *Client) CreateRole(name, description string) (*berth.RoleWithPermissions, error) {
 	req := berth.NewCreateRoleRequest(description, name)
 
 	resp, _, err := c.api.AdminAPI.ApiV1AdminRolesPost(c.ctx).CreateRoleRequest(*req).Execute()
@@ -119,15 +92,10 @@ func (c *Client) CreateRole(name, description string) (*Role, error) {
 		return nil, fmt.Errorf("failed to create role: %w", err)
 	}
 
-	return &Role{
-		ID:          uint(resp.Data.Id),
-		Name:        resp.Data.Name,
-		Description: resp.Data.Description,
-		IsAdmin:     resp.Data.IsAdmin,
-	}, nil
+	return &resp.Data, nil
 }
 
-func (c *Client) UpdateRole(id uint, name, description string) (*Role, error) {
+func (c *Client) UpdateRole(id uint, name, description string) (*berth.RoleWithPermissions, error) {
 	req := berth.NewUpdateRoleRequest(description, name)
 
 	resp, _, err := c.api.AdminAPI.ApiV1AdminRolesIdPut(c.ctx, int32(id)).UpdateRoleRequest(*req).Execute()
@@ -135,12 +103,7 @@ func (c *Client) UpdateRole(id uint, name, description string) (*Role, error) {
 		return nil, fmt.Errorf("failed to update role: %w", err)
 	}
 
-	return &Role{
-		ID:          uint(resp.Data.Id),
-		Name:        resp.Data.Name,
-		Description: resp.Data.Description,
-		IsAdmin:     resp.Data.IsAdmin,
-	}, nil
+	return &resp.Data, nil
 }
 
 func (c *Client) DeleteRole(id uint) error {
@@ -151,7 +114,7 @@ func (c *Client) DeleteRole(id uint) error {
 	return nil
 }
 
-func (c *Client) ListRolePermissions(roleID uint) ([]RolePermission, []Permission, error) {
+func (c *Client) ListRolePermissions(roleID uint) ([]berth.StackPermissionRule, []berth.PermissionInfo, error) {
 	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminRolesRoleIdStackPermissionsGet(c.ctx, int32(roleID)).Execute()
 	if err != nil {
 		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
@@ -160,46 +123,25 @@ func (c *Client) ListRolePermissions(roleID uint) ([]RolePermission, []Permissio
 		return nil, nil, fmt.Errorf("failed to list role permissions: %w", err)
 	}
 
-	perms := make([]RolePermission, 0, len(resp.Data.PermissionRules))
-	for _, p := range resp.Data.PermissionRules {
-		perms = append(perms, RolePermission{
-			ID:           uint(p.Id),
-			ServerID:     uint(p.ServerId),
-			PermissionID: uint(p.PermissionId),
-			StackPattern: p.StackPattern,
-		})
-	}
-
-	permissions := make([]Permission, 0, len(resp.Data.Permissions))
-	for _, p := range resp.Data.Permissions {
-		permissions = append(permissions, Permission{
-			ID:          uint(p.Id),
-			Name:        p.Name,
-			Resource:    p.Resource,
-			Action:      p.Action,
-			Description: p.Description,
-		})
-	}
-
-	return perms, permissions, nil
+	return resp.Data.PermissionRules, resp.Data.Permissions, nil
 }
 
-func (c *Client) GetRolePermission(roleID, permissionID uint) (*RolePermission, error) {
+func (c *Client) GetRolePermission(roleID, permissionID uint) (*berth.StackPermissionRule, error) {
 	perms, _, err := c.ListRolePermissions(roleID)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, perm := range perms {
-		if perm.ID == permissionID {
-			return &perm, nil
+	for i, perm := range perms {
+		if uint(perm.Id) == permissionID {
+			return &perms[i], nil
 		}
 	}
 
 	return nil, notFound("permission not found")
 }
 
-func (c *Client) CreateRolePermission(roleID, serverID, permissionID uint, stackPattern string) (*RolePermission, error) {
+func (c *Client) CreateRolePermission(roleID, serverID, permissionID uint, stackPattern string) (*berth.StackPermissionRule, error) {
 	req := berth.NewCreateStackPermissionRequest(int32(permissionID), int32(serverID), stackPattern)
 
 	_, _, err := c.api.AdminAPI.ApiV1AdminRolesRoleIdStackPermissionsPost(c.ctx, int32(roleID)).CreateStackPermissionRequest(*req).Execute()
@@ -207,9 +149,9 @@ func (c *Client) CreateRolePermission(roleID, serverID, permissionID uint, stack
 		return nil, fmt.Errorf("failed to create role permission: %w", err)
 	}
 
-	return &RolePermission{
-		ServerID:     serverID,
-		PermissionID: permissionID,
+	return &berth.StackPermissionRule{
+		ServerId:     int32(serverID),
+		PermissionId: int32(permissionID),
 		StackPattern: stackPattern,
 	}, nil
 }
@@ -222,27 +164,7 @@ func (c *Client) DeleteRolePermission(roleID, permissionID uint) error {
 	return nil
 }
 
-func (c *Client) ListPermissions() ([]Permission, error) {
-	resp, _, err := c.api.AdminAPI.ApiV1AdminPermissionsGet(c.ctx).Execute()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list permissions: %w", err)
-	}
-
-	permissions := make([]Permission, 0, len(resp.Data.Permissions))
-	for _, p := range resp.Data.Permissions {
-		permissions = append(permissions, Permission{
-			ID:          uint(p.Id),
-			Name:        p.Name,
-			Resource:    p.Resource,
-			Action:      p.Action,
-			Description: p.Description,
-		})
-	}
-
-	return permissions, nil
-}
-
-func (c *Client) ListPermissionDetails() ([]berth.PermissionInfo, error) {
+func (c *Client) ListPermissions() ([]berth.PermissionInfo, error) {
 	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminPermissionsGet(c.ctx).Execute()
 	if err != nil {
 		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
@@ -252,6 +174,21 @@ func (c *Client) ListPermissionDetails() ([]berth.PermissionInfo, error) {
 	}
 
 	return resp.Data.Permissions, nil
+}
+
+func (c *Client) GetPermissionByName(name string) (*berth.PermissionInfo, error) {
+	permissions, err := c.ListPermissions()
+	if err != nil {
+		return nil, err
+	}
+
+	for i, permission := range permissions {
+		if permission.Name == name {
+			return &permissions[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("permission '%s' not found", name)
 }
 
 func (c *Client) ListServers() ([]berth.ServerInfo, error) {
@@ -276,19 +213,4 @@ func (c *Client) ListS3Buckets() ([]berth.BucketResponse, error) {
 	}
 
 	return resp.Data, nil
-}
-
-func (c *Client) GetPermissionByName(name string) (*Permission, error) {
-	permissions, err := c.ListPermissions()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, perm := range permissions {
-		if perm.Name == name {
-			return &perm, nil
-		}
-	}
-
-	return nil, fmt.Errorf("permission '%s' not found", name)
 }
