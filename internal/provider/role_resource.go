@@ -262,27 +262,10 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	data.Description = types.StringValue(role.Description)
 
 	if len(data.Permissions) > 0 {
-		perms, allPermissions, err := r.client.ListRolePermissions(uint(id))
-		if err != nil {
+		if err := r.refreshClaimedRoleRules(uint(id), &data); err != nil {
 			resp.Diagnostics.AddError("Failed to read role permissions", err.Error())
 			return
 		}
-
-		permMap := make(map[uint]string)
-		for _, p := range allPermissions {
-			permMap[p.ID] = p.Name
-		}
-
-		updatedPerms := make([]RolePermissionInline, 0, len(perms))
-		for _, perm := range perms {
-			updatedPerms = append(updatedPerms, RolePermissionInline{
-				ID:             types.StringValue(strconv.FormatUint(uint64(perm.ID), 10)),
-				ServerID:       types.Int64Value(int64(perm.ServerID)),
-				PermissionName: types.StringValue(permMap[perm.PermissionID]),
-				StackPattern:   types.StringValue(perm.StackPattern),
-			})
-		}
-		data.Permissions = updatedPerms
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -311,85 +294,10 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	if len(data.Permissions) > 0 || len(state.Permissions) > 0 || len(data.PermissionSets) > 0 || len(state.PermissionSets) > 0 {
-
-		existingPerms, _, err := r.client.ListRolePermissions(roleID)
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to read existing permissions", err.Error())
+	if rolePermissionsTouched(&data, &state) {
+		if err := r.reconcileRoleRules(roleID, &data, &state); err != nil {
+			resp.Diagnostics.AddError("Failed to update role permissions", err.Error())
 			return
-		}
-
-		for _, perm := range existingPerms {
-			if err := r.client.DeleteRolePermission(roleID, perm.ID); err != nil {
-				resp.Diagnostics.AddError("Failed to delete permission", err.Error())
-				return
-			}
-		}
-
-		for _, permSet := range data.PermissionSets {
-			for _, serverID := range permSet.ServerIDs {
-				for _, perm := range permSet.Permissions {
-					stackPattern := "*"
-					if !perm.Pattern.IsNull() && !perm.Pattern.IsUnknown() {
-						stackPattern = perm.Pattern.ValueString()
-					}
-
-					permission, err := r.client.GetPermissionByName(perm.Name.ValueString())
-					if err != nil {
-						resp.Diagnostics.AddError("Failed to find permission", err.Error())
-						return
-					}
-
-					_, err = r.client.CreateRolePermission(
-						roleID,
-						uint(serverID.ValueInt64()),
-						permission.ID,
-						stackPattern,
-					)
-					if err != nil {
-						resp.Diagnostics.AddError("Failed to create role permission from permission set", err.Error())
-						return
-					}
-				}
-			}
-		}
-
-		for i, perm := range data.Permissions {
-			stackPattern := "*"
-			if !perm.StackPattern.IsNull() && !perm.StackPattern.IsUnknown() {
-				stackPattern = perm.StackPattern.ValueString()
-			}
-
-			permission, err := r.client.GetPermissionByName(perm.PermissionName.ValueString())
-			if err != nil {
-				resp.Diagnostics.AddError("Failed to find permission", err.Error())
-				return
-			}
-
-			createdPerm, err := r.client.CreateRolePermission(
-				roleID,
-				uint(perm.ServerID.ValueInt64()),
-				permission.ID,
-				stackPattern,
-			)
-			if err != nil {
-				resp.Diagnostics.AddError("Failed to create role permission", err.Error())
-				return
-			}
-
-			perms, _, err := r.client.ListRolePermissions(roleID)
-			if err != nil {
-				resp.Diagnostics.AddError("Failed to read created permission", err.Error())
-				return
-			}
-
-			for _, p := range perms {
-				if p.ServerID == createdPerm.ServerID && p.PermissionID == permission.ID && p.StackPattern == stackPattern {
-					data.Permissions[i].ID = types.StringValue(strconv.FormatUint(uint64(p.ID), 10))
-					data.Permissions[i].StackPattern = types.StringValue(stackPattern)
-					break
-				}
-			}
 		}
 	}
 
