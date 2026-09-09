@@ -214,3 +214,68 @@ func (c *Client) ListS3Buckets() ([]berth.BucketResponse, error) {
 
 	return resp.Data, nil
 }
+
+func (c *Client) GetS3Bucket(id uint) (*berth.BucketResponse, error) {
+	resp, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsIdGet(c.ctx, int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to get s3 bucket: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to get s3 bucket: %w", err)
+	}
+
+	return &resp.Data, nil
+}
+
+func (c *Client) CreateS3Bucket(label, endpoint, region, bucketName, accessKeyID, secretAccessKey string) (*berth.BucketResponse, error) {
+	req := berth.CreateRequest{
+		AccessKeyId:     accessKeyID,
+		BucketName:      bucketName,
+		Endpoint:        endpoint,
+		Label:           label,
+		Region:          region,
+		SecretAccessKey: secretAccessKey,
+	}
+
+	resp, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsPost(c.ctx).CreateRequest(req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to create s3 bucket: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to create s3 bucket: %w", err)
+	}
+
+	return &resp.Data, nil
+}
+
+func (c *Client) UpdateS3Bucket(id uint, label, endpoint, region, bucketName, accessKeyID, secretAccessKey string) (*berth.BucketResponse, error) {
+	req := berth.UpdateRequest{
+		AccessKeyId:     accessKeyID,
+		BucketName:      bucketName,
+		Endpoint:        endpoint,
+		Label:           label,
+		Region:          region,
+		SecretAccessKey: secretAccessKey,
+	}
+
+	resp, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsIdPut(c.ctx, int32(id)).UpdateRequest(req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to update s3 bucket: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to update s3 bucket: %w", err)
+	}
+
+	return &resp.Data, nil
+}
+
+func (c *Client) DeleteS3Bucket(id uint) error {
+	_, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsIdDelete(c.ctx, int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return notFound(fmt.Sprintf("failed to delete s3 bucket: %s", httpResp.Status))
+		}
+		return fmt.Errorf("failed to delete s3 bucket: %w", err)
+	}
+	return nil
+}
