@@ -361,3 +361,82 @@ func credentialOptionalPointer(value string) *string {
 	}
 	return &value
 }
+
+func (c *Client) GetServer(id uint) (*berth.ServerInfo, error) {
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminServersIdGet(c.ctx, int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to get server: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to get server: %w", err)
+	}
+
+	return &resp.Data.Server, nil
+}
+
+func (c *Client) CreateServer(name, host string, port int64, accessToken, backupPassword, description string, backupsEnabled, isActive, skipSSLVerification *bool) (*berth.ServerInfo, error) {
+	req := berth.NewServerCreateRequest(accessToken, host, name, int32(port))
+	req.BackupPassword = serverOptionalString(backupPassword)
+	req.Description = serverOptionalString(description)
+	req.BackupsEnabled = backupsEnabled
+	req.IsActive = isActive
+	if skipSSLVerification != nil {
+		req.SkipSslVerification.Set(skipSSLVerification)
+	}
+
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminServersPost(c.ctx).ServerCreateRequest(*req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to create server: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to create server: %w", err)
+	}
+
+	return &resp.Data.Server, nil
+}
+
+func (c *Client) UpdateServer(id uint, name, host string, port int64, accessToken, backupPassword, description string, backupsEnabled, isActive, skipSSLVerification *bool, s3BucketID *int64) (*berth.ServerInfo, error) {
+	req := berth.NewServerUpdateRequest(host, name, int32(port))
+	req.AccessToken = serverOptionalString(accessToken)
+	req.BackupPassword = serverOptionalString(backupPassword)
+	req.Description = &description
+	req.BackupsEnabled = backupsEnabled
+	req.IsActive = isActive
+	if skipSSLVerification != nil {
+		req.SkipSslVerification.Set(skipSSLVerification)
+	}
+	if s3BucketID != nil {
+		bucketID := int32(*s3BucketID)
+		req.S3BucketId.Set(&bucketID)
+	} else {
+		req.S3BucketId.Set(nil)
+	}
+
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminServersIdPut(c.ctx, int32(id)).ServerUpdateRequest(*req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to update server: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to update server: %w", err)
+	}
+
+	return &resp.Data.Server, nil
+}
+
+func (c *Client) DeleteServer(id uint) error {
+	_, httpResp, err := c.api.AdminAPI.ApiV1AdminServersIdDelete(c.ctx, int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return notFound(fmt.Sprintf("failed to delete server: %s", httpResp.Status))
+		}
+		return fmt.Errorf("failed to delete server: %w", err)
+	}
+	return nil
+}
+
+func serverOptionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
