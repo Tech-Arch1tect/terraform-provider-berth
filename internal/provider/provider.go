@@ -85,6 +85,7 @@ func (p *BerthProvider) Resources(ctx context.Context) []func() resource.Resourc
 		NewRoleResource,
 		NewRolePermissionResource,
 		NewS3BucketResource,
+		NewRegistryCredentialResource,
 	}
 }
 

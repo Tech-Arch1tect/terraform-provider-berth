@@ -279,3 +279,85 @@ func (c *Client) DeleteS3Bucket(id uint) error {
 	}
 	return nil
 }
+
+func (c *Client) ListRegistryCredentials(serverID uint) ([]berth.RegistryCredentialInfo, error) {
+	resp, httpResp, err := c.api.RegistriesAPI.ApiV1ServersServeridRegistriesGet(c.ctx, int32(serverID)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list registry credentials: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to list registry credentials: %w", err)
+	}
+
+	return resp.Data.Credentials, nil
+}
+
+func (c *Client) GetRegistryCredential(serverID, id uint) (*berth.RegistryCredentialInfo, error) {
+	resp, httpResp, err := c.api.RegistriesAPI.ApiV1ServersServeridRegistriesIdGet(c.ctx, int32(serverID), int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to get registry credential: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to get registry credential: %w", err)
+	}
+
+	return &resp.Data.Credential, nil
+}
+
+func (c *Client) CreateRegistryCredential(serverID uint, stackPattern, registryURL, imagePattern, username, password string) (*berth.RegistryCredentialInfo, error) {
+	req := berth.CreateCredentialRequest{
+		ImagePattern: credentialOptionalPointer(imagePattern),
+		Password:     password,
+		RegistryUrl:  registryURL,
+		StackPattern: credentialOptionalPointer(stackPattern),
+		Username:     username,
+	}
+
+	resp, httpResp, err := c.api.RegistriesAPI.ApiV1ServersServeridRegistriesPost(c.ctx, int32(serverID)).CreateCredentialRequest(req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to create registry credential: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to create registry credential: %w", err)
+	}
+
+	return &resp.Data.Credential, nil
+}
+
+func (c *Client) UpdateRegistryCredential(serverID, id uint, stackPattern, registryURL, imagePattern, username, password string) (*berth.RegistryCredentialInfo, error) {
+	req := berth.UpdateCredentialRequest{
+		ImagePattern: credentialOptionalPointer(imagePattern),
+		Password:     credentialOptionalPointer(password),
+		RegistryUrl:  registryURL,
+		StackPattern: credentialOptionalPointer(stackPattern),
+		Username:     username,
+	}
+
+	resp, httpResp, err := c.api.RegistriesAPI.ApiV1ServersServeridRegistriesIdPut(c.ctx, int32(serverID), int32(id)).UpdateCredentialRequest(req).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to update registry credential: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to update registry credential: %w", err)
+	}
+
+	return &resp.Data.Credential, nil
+}
+
+func (c *Client) DeleteRegistryCredential(serverID, id uint) error {
+	_, httpResp, err := c.api.RegistriesAPI.ApiV1ServersServeridRegistriesIdDelete(c.ctx, int32(serverID), int32(id)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return notFound(fmt.Sprintf("failed to delete registry credential: %s", httpResp.Status))
+		}
+		return fmt.Errorf("failed to delete registry credential: %w", err)
+	}
+	return nil
+}
+
+func credentialOptionalPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
