@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -439,4 +440,56 @@ func serverOptionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func (c *Client) GetUserRoles(userID uint) (*berth.UserInfo, error) {
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminUsersIdRolesGet(c.ctx, int32(userID)).Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to get user roles: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to get user roles: %w", err)
+	}
+
+	return &resp.Data.User, nil
+}
+
+func (c *Client) AssignRole(userID, roleID uint) error {
+	req := berth.NewAssignRoleRequest(int32(roleID), int32(userID))
+
+	_, httpResp, err := c.api.AdminAPI.ApiV1AdminUsersAssignRolePost(c.ctx).AssignRoleRequest(*req).Execute()
+	if err != nil {
+		return roleAssignmentError("failed to assign role", err, httpResp)
+	}
+	return nil
+}
+
+func (c *Client) RevokeRole(userID, roleID uint) error {
+	req := berth.NewRevokeRoleRequest(int32(roleID), int32(userID))
+
+	_, httpResp, err := c.api.AdminAPI.ApiV1AdminUsersRevokeRolePost(c.ctx).RevokeRoleRequest(*req).Execute()
+	if err != nil {
+		return roleAssignmentError("failed to revoke role", err, httpResp)
+	}
+	return nil
+}
+
+func roleAssignmentError(prefix string, err error, httpResp *http.Response) error {
+	if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+		return notFound(fmt.Sprintf("%s: %s", prefix, httpResp.Status))
+	}
+
+	var apiErr *berth.GenericOpenAPIError
+	if errors.As(err, &apiErr) {
+		var payload struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if jsonErr := json.Unmarshal(apiErr.Body(), &payload); jsonErr == nil && payload.Error.Message != "" {
+			return fmt.Errorf("%s: %s", prefix, payload.Error.Message)
+		}
+	}
+
+	return fmt.Errorf("%s: %w", prefix, err)
 }
