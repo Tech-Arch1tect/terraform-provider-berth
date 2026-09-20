@@ -177,6 +177,33 @@ func (c *Client) ListPermissions() ([]berth.PermissionInfo, error) {
 	return resp.Data.Permissions, nil
 }
 
+func (c *Client) ListRoleAssignablePermissions() ([]berth.PermissionInfo, error) {
+	resp, httpResp, err := c.api.AdminAPI.ApiV1AdminPermissionsGet(c.ctx).Type_("role").Execute()
+	if err != nil {
+		if httpResp != nil && httpResp.StatusCode == http.StatusNotFound {
+			return nil, notFound(fmt.Sprintf("failed to list role-assignable permissions: %s", httpResp.Status))
+		}
+		return nil, fmt.Errorf("failed to list role-assignable permissions: %w", err)
+	}
+
+	return resp.Data.Permissions, nil
+}
+
+func (c *Client) GetRoleAssignablePermissionByName(name string) (*berth.PermissionInfo, error) {
+	permissions, err := c.ListRoleAssignablePermissions()
+	if err != nil {
+		return nil, err
+	}
+
+	for i, permission := range permissions {
+		if permission.Name == name {
+			return &permissions[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("role-assignable permission '%s' not found", name)
+}
+
 func (c *Client) GetPermissionByName(name string) (*berth.PermissionInfo, error) {
 	permissions, err := c.ListPermissions()
 	if err != nil {

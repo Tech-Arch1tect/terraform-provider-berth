@@ -94,51 +94,48 @@ func (r *RolePermissionResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	permission, err := r.client.GetPermissionByName(data.PermissionName.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to find permission", err.Error())
+	if err := r.createRolePermission(&data); err != nil {
+		resp.Diagnostics.AddError("Failed to create role permission", err.Error())
 		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func (r *RolePermissionResource) createRolePermission(data *RolePermissionResourceModel) error {
+	permission, err := r.client.GetRoleAssignablePermissionByName(data.PermissionName.ValueString())
+	if err != nil {
+		return err
 	}
 
 	stackPattern := "*"
 	if !data.StackPattern.IsNull() {
 		stackPattern = data.StackPattern.ValueString()
 	}
-
-	perm, err := r.client.CreateRolePermission(
+	created, err := r.client.CreateRolePermission(
 		uint(data.RoleID.ValueInt64()),
 		uint(data.ServerID.ValueInt64()),
 		uint(permission.Id),
 		stackPattern,
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to create role permission", err.Error())
-		return
+		return err
 	}
 
-	perms, _, err := r.client.ListRolePermissions(uint(data.RoleID.ValueInt64()))
+	permissions, _, err := r.client.ListRolePermissions(uint(data.RoleID.ValueInt64()))
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to read created permission", err.Error())
-		return
+		return err
 	}
 
-	var foundID uint
-	for _, p := range perms {
-		if uint(p.ServerId) == uint(perm.ServerId) && uint(p.PermissionId) == uint(permission.Id) && p.StackPattern == stackPattern {
-			foundID = uint(p.Id)
-			break
+	for _, current := range permissions {
+		if uint(current.ServerId) == uint(created.ServerId) && uint(current.PermissionId) == uint(permission.Id) && current.StackPattern == stackPattern {
+			data.ID = types.StringValue(strconv.FormatUint(uint64(current.Id), 10))
+			data.StackPattern = types.StringValue(stackPattern)
+			return nil
 		}
 	}
 
-	if foundID == 0 {
-		resp.Diagnostics.AddError("Failed to find created permission", "Permission was created but could not be found")
-		return
-	}
-
-	data.ID = types.StringValue(strconv.FormatUint(uint64(foundID), 10))
-	data.StackPattern = types.StringValue(stackPattern)
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	return fmt.Errorf("permission was created but could not be found")
 }
 
 func (r *RolePermissionResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {

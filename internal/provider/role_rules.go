@@ -174,6 +174,10 @@ func (r *RoleResource) reconcileRoleRules(roleID uint, plan, state *RoleResource
 		return err
 	}
 	permissionIDs := permissionIDsByName(permissions)
+	permissionsByID := make(map[uint]berth.PermissionInfo, len(permissions))
+	for _, permission := range permissions {
+		permissionsByID[uint(permission.Id)] = permission
+	}
 
 	desired, err := plannedRoleRules(plan, permissionIDs)
 	if err != nil {
@@ -191,6 +195,21 @@ func (r *RoleResource) reconcileRoleRules(roleID uint, plan, state *RoleResource
 	}
 
 	deletions, creations := roleRuleChanges(desired, previous, current)
+	if len(creations) > 0 {
+		assignable, err := r.client.ListRoleAssignablePermissions()
+		if err != nil {
+			return err
+		}
+		assignableIDs := make(map[uint]bool, len(assignable))
+		for _, permission := range assignable {
+			assignableIDs[uint(permission.Id)] = true
+		}
+		for _, rule := range creations {
+			if !assignableIDs[uint(rule.PermissionId)] {
+				return fmt.Errorf("permission '%s' is not role-assignable", permissionsByID[uint(rule.PermissionId)].Name)
+			}
+		}
+	}
 
 	for _, ruleID := range deletions {
 		if err := r.client.DeleteRolePermission(roleID, ruleID); err != nil {
