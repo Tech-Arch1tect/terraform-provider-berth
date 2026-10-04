@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.16.1
-	github.com/tech-arch1tect/berth-go-api-client v0.5.2
+	github.com/tech-arch1tect/berth-go-api-client v0.5.3
 )
 
 require (

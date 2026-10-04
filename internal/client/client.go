@@ -283,7 +283,7 @@ func (c *Client) UpdateS3Bucket(id uint, label, endpoint, region, bucketName, ac
 		Endpoint:        endpoint,
 		Label:           label,
 		Region:          region,
-		SecretAccessKey: secretAccessKey,
+		SecretAccessKey: &secretAccessKey,
 	}
 
 	resp, httpResp, err := c.api.S3BucketsAPI.ApiV1AdminS3BucketsIdPut(c.ctx, int32(id)).UpdateRequest(req).Execute()
