@@ -1,11 +1,11 @@
 .PHONY: build install test clean fmt
 
 BINARY_NAME=terraform-provider-berth
-VERSION?=0.2.0
+VERSION?=0.2.1
 OS_ARCH?=linux_amd64
 
 build:
-	go build -o ${BINARY_NAME}
+	go build -ldflags "-X main.version=${VERSION}" -o ${BINARY_NAME}
 
 install: build
 	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/tech-arch1tect/berth/${VERSION}/${OS_ARCH}
